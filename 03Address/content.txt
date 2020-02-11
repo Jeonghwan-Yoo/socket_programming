@@ -1,0 +1,310 @@
+03-1 소켓에 할당되는 IP주소와 PORT번호
+IP는 Internet Protocol의 약자로 데이터를 송수신할 목적으로 컴퓨터에게 부여하는 값.
+PORT번호는 컴퓨터에게 부여하는 값이 아니고 프로그램상에서 생성되는 소켓을 구분하기 위해 소켓에 부여되는 번호.
+
+Internet Address
+인터넷에 컴퓨터를 연결해서 데이터를 주고받기 위해서는 IP주소를 부여 받아야 한다.
+IPv4(Internet Protocol version 4) 4바이트 주소체계
+IPv6(Internet Protocol version 6) 16바이트 주소체계
+차이점은 IP주소의 표현에 사용되는 바이트 크기.
+
+IPv4 기준의 4바이트 IP주소는 네트워크 주소와 호스트(컴퓨터) 주소로 나뉘며, 주소의 형태에 따라 A, B, C, D, E 클래스로 분류.
+클래스 A |네트워크 ID||호스트  ID||호스트  ID||호스트  ID|
+클래스 B |네트워크 ID||네트워크 ID||호스트  ID||호스트  ID|
+클래스 C |네트워크 ID||네트워크 ID||네트워크 ID||호스트  ID|
+클래스 D |네트워크 ID||네트워크 ID||네트워크 ID||네트워크 ID| : 멀티캐스트 IP주소
+클래스 E는 일반적이지 않은, 예약되어있는 주소체계
+
+네트워크 주소란 네트워크의 구분을 위한 IP주소의 일부르 말한다.
+WWW.SEMI.COM에게 데이터를 전송한다고 가정.
+먼저 SEMI.COM의 네트워크로 데이터를 전송하는 것이 우선이다.
+4바이트 IP주소 중에서 네트워크 주소만을 참조해서 일단 SEMI.COM의 네트워크로 데이터가 전송된다.
+해당 네트워크는(라우터) 전송된 데이터의 호스트 주소를 참조하여 컴퓨터로 데이터를 전송해준다.
+네트워크로 데이터가 전송된다는 것은 네트워크를 구성하는 Router 또는 Switch로 데이터가 전송됨.
+그러면 데이터를 전송 받은 라우터는 데이터에 적혀있는 호스트 주소를 참조하여 호스트에 데이터를 전송.
+
+라우터와 스위치
+외부로부터 수신된 데이터를 호스트에 전달하고, 호스트가 전달하는ㄷ ㅔ이터를 외부로 송신해주는 물리적 장치가 필요하다.
+라우터 또는 스위치이고 컴퓨터에 지나지 않는다.
+라우터보다 기능적으로 작은 것을 스위치.
+
+클래스 별 네트워크 주소와 호스트 주소의 경계
+IP주소의 첫 번째 바이트만 딱보면 네트워크 주소가 몇 바이트인지 판단이 가능하다.
+클래스 A의 첫 번째 바이트 범위:0이상 127이하
+클래스 B의 첫 번째 바이트 범위:128이상 191이하
+클래스 C의 첫 번째 바이트 범위:192이상 223이하
+또는
+클래스 A의 첫 번째 비트는 항상 0으로 시작
+클래스 B의 첫 두 비트는 항상 10으로 시작
+클래스 C의 첫 세 비트는 항상 110으로 시작
+
+소켓의 구분에 활용되는 PORT 번호
+IP만 있다면 목적지 컴퓨터로 데이터를 전송할 순 있지만 데이터를 수신해야 하는 최종 목적지인 응용 프로그램에까지 데이터를 전송할 순 없다.
+
+P2P프로그램은 하나의 파일을 블록단위로 나눠서 동시에 둘 이상의 컴퓨터로부터 데이터를 전송받는다.
+
+컴퓨터에는 NIC(네트워크 인터페이스 카드)인 데이터 송수신장치가 달려있다.
+IP는 데이터를 NIC를 통해 컴퓨터 내부로 전송하는데 사용된다.
+그러나 컴퓨터 내부로 전송된 데이터를 소켓에 적절히 분배하는 작업은 운영체제가 담당한다.
+이 때 운영체제는 PORT 번호를 활용한다.
+NIC을 통해 수신된 데이터 안에는 PORT 번호가 새겨져 있다.
+운영체제는 이 정보를 참조해서 일치하는 PORT번호의 소켓에 데이터를 전달하는 것.
+하나의 운영체제 내에서 동일한 PORT번호를 둘 이상의 소켓에 할당할 수 없다.
+PORT번호는 16비트로 표현된다.
+범위는 0~65535
+0~1023은 Well-known PORT로 특정 프로그램에 할당하기로 예약되어 있어, 제외한 다른 값을 할당해야 한다.
+PORT번호는 중복이 불가능하지만, TCP소켓과 UDP소켓은 PORT번호를 공유하지 않기 때문에 중복되어도 상관없다.
+데이터 전송의 목적지 주소에는 IP주소뿐만 아니라 PORT번호도 포함이다.
+그래야 응용프로그램의 소켓까지 데이터를 전달할 수 있다.
+
+03-2 주소성보의 표현
+응용프로그램상에서의 IP주소와 PORT번호 표현을 위한 구조체가 정의되어 있다.
+
+IPv4 기반의 주소표현을 위한 구조체
+bind 함수에 주소정보를 전달하는 용도
+struct sockaddr_in {
+    sa_family_t    sin_family; // Address Family
+    uint16_t       sin_port; // 16비트 TCP/UDP PORT 번호
+    struct in_addr sin_addr; // 32비트 IP주소
+    char           sin_zero[8]; // 사용되지 않음
+};
+struct in_addr {
+    in_addr_t s_addr; // 32비트 IPv4 인터넷 주소
+};
+uint16_t, in_addr_t와 같은 자료형의 근거는 POSIX(Portable Operating System Interface)에서 찾을 수 있다.
+유닉스 계열의 운영체제에 적용하기 위한 표준이다.
+자료형 이름        정보                                   선언된 헤더파일
+int8_t         signed 8-bit int                          sys/types.h
+uint8_t        unsigned 8-bit int(unsigned char)
+int16_t        sigend 16-bit int
+uint16_t       unsigned 16-bit int(unsigned short)
+int32_t        signed 32-bit int
+uint32_t       unsigned 32-bit int(unsigned long)         
+sa_family_t    address family                            sys/socket.h
+socklen_t      length of struct                           
+in_addr_t      IP주소정보, uint32_t로 정의                netinet/in.h
+in_port_t      PORT번호정보, uint16_t로 정의               
+
+구조체 sockaddr_in의 멤버에 대한 분석
+멤버 sin_family
+프로토콜 체계마다 적용하는 주소체계가 다르다.
+그래서 sin_family에 적용할 주소체계 정보를 저장해야 한다.
+Address Family   의미
+AF_INET          IPv4 인터넷 프로토콜에 적용하는 주소체계
+AF_INET6         IPv6 인터넷 프로토콜에 적용하는 주소체계 
+AF_LOCAL         로컬 통신을 위한 유닉스 프로토콜의 주소체계
+
+멤버 sin_port
+16비트 PORT번호를 저장한다.
+단 네트워크 바이트 순서로 저장해야 한다.
+
+멤버 sin_addr
+32비트 IP주소정보를 저장한다.
+단 네트워크 바이트 순서로 저장해야 한다.
+
+멤버 sin_zero
+단순히 sockaddr_in의 크기를 구조체 sockaddr와 일치시키기 위해 삽입된 멤버.
+그러나 반드시 0으로 채워야 한다.
+
+bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr))
+bind함수는 sockaddr 구조체 변수의 주소 값을 요구한다.
+struct sockaddr {
+    sa_family_t sin_family; // Address Family
+    char sa_data[14]; // 주소 정보
+};
+sa_data에 저장되는 주소정보에는 IP주소와 PORT번호가 포함되어야 하고, 이 두가지 정보를 담고 남은 부분은 0으로 채울 것을 bind함수는 요구.
+이는 주소정보를 담기 불편하여 sockaddr_in이 등장.
+형성되는 구조체 변수의 바이트 열이 bind 함수가 요구하는 바이트 열이 된다.
+결국 인자전달을 위한 형변환을 통해서 sockaddr 구조체 변수에 bind 함수가 요구하는 바대로 데이터를 채워 넣은 효과.
+
+sin_family
+sockaddr_in은 IPv4의 주소정보를 담기 위해 정의된 구조체.
+구조체 sockaddr은 IPv4의 주소정보만을 담기 위해 정의된 구조체가 아니다.
+그래서 구조체 sockaddr에서는 주소체계 정보를 구조체 멤버 sin_family에 저장할 것을 요구.
+때문에 구조체 sockaddr과 동일한 바이트 열을 편히 구성하기 위해서 정의된 구조체 sockaddr_in에도 주소체계 정보를 담기 위한 멤버가 존재.
+
+03-3 네트워크 바이트 순서와 인터넷 주소 변환
+CPU에 따라서 정수를 메모리공간에 저장하는 방식이 달라질 수 있다.
+저장순서가 다르다는 것은 전송되어온 데이터의 해석순서가 다름을 뜻한다.
+
+바이트 Order와 네트워크 바이트 순서
+Big Endian:상위 바이트의 값을 작은 번지수에 저장하는 방식
+Little Endian:상위 바이트의 값을 큰 번지수에 저장하는 방식
+0x20번지에 0x12345678을 저장
+빅 엔디안
+0x12 0x34 0x56 0x78
+리틀 엔디안
+0x78 0x56 0x34 0x12
+
+CPU의 데이터 저장방식을 의미하는 Host Byte Order는 CPU에 따라서 차이가 난다.
+인텔계열 CPU는 리틀 엔디안 방식으로 데이터를 저장.
+
+문제점 때문에 네트워크를 통해서 데이터를 전송할 때에는 통일된 기준으로 데이터를 전송하기로 약속.
+Network Byte Order:빅 엔디안
+모든 컴퓨터는 수신된 데이터가 네트워크 바이트 순서로 정렬되어 있음을 인식해야 하며, 리틀 엔디안 시스템에서는
+데이터를 전송하기에 앞서 빅 엔디안의 정렬방식으로 데이터를 재정렬해야 한다.
+
+Endian Conversions
+unsigend short htons(unsigned short);
+unsigend short ntohs(unsigned short);
+unsigned long htonl(unsigned long);
+unsigned long ntohl(unsigned long);
+h는 host바이트 순서. n은 network바이트 순서.
+
+리틀 엔디안, 빅 엔디안에 상관없이 동일하게 동작하는 코드를 작성.
+빅 엔디안 시스템에서도 호스트 바이트 순서를 네트워크 바이트 순서로 변환하는 과정을 거치는 것이 좋다.
+endian_conv.c
+
+인텔 그리고 AMD 계열의 CPU 모두 리틀 엔디안을 기준으로 정렬.
+
+데이터 전송하기 전에 다 바꿔줘야 하나?
+데이터 송수신 과정에서 네트워크 바이트 순서를 기준으로 자동으로 변환된다.
+때문에 sockaddr_in 구조체 변수에 데이터를 채울 때 이외에는 바이트 순서를 신경쓰지 않아도 된다.
+
+03-4 인터넷 주소의 초기화와 할당
+문자열 정보를 네트워크 바이트 순서의 정수로 변환하기
+sockaddr_in 안에서 주소정보를 저장하기 위해 선언된 멤버는 32비트 정수형으로 정의.
+문자열로 표현된 IP주소를 32비트 정수형으로 변환해 주는 함수가 있다.
+이 함수는 변환과정에서 네트워크 바이트 순서로의 변환도 동시에 진행한다.
+#include <arpa/inet.h>
+in_addr_t inet_addrIconst char* string); // 성공 시 빅 엔디안으로 변환된 32비트 정수 값, 실패 시 INADDR_NONE 반환
+"211.214.107.99" 같이 점찍힌 10진수로 표현된 문자열을 전달하면, IP주소 정보를 32비트 정수형으로 반환한다.
+inet_addr.c
+
+inet_addr 함수는 32비트 정수형태로 IP주소를 변환할 뿐만 아니라, 유효하지 못한 IP 주소에 대한 오류검출 능력도 갖고 있다.
+
+inet_aton 함수도 inet_addr 함수와 동일.
+문자열 형태의 IP 주소를 32비트 정소, 네트워크 바이트 순서로 정렬해서 반환한다.
+다만 구조체 변수 in_addr를 이용하는 형태이다.
+활용도는 inet_aton 함수가 더 높다.
+#include <arpa/inet.h>
+int inet_aton(const char* string, struct in_addr* addr); // 성공 시 1(true), 실패 시 0(false) 반환
+string:변환할 IP 주소 정보를 담고 있는 문자열의 주소 값 전달.
+addr:변환된 정보를 저장할 in_addr 구조체 변수의 주소 값 전달.
+inet_addr함수를 사용할 경우, 변환된 IP주소 정보를 구조체 sockaddr_in에 선언되어 있는 in_addr 구조체 벼눗에 대입하는 과정이 추가.
+하지만 이 함수는 인자로 in_addr 구조체 변수의 주소 값을 전달하면, 변환된 값이 자동으로 in_addr 구조체 변수에 저장되기 때문.
+inet_aton.c
+
+네트워크 바이트 순서로 정렬된 정수형 IP주소 정보를 문자열의 형태로 변환.
+#include <arpa/inet.h>
+char* inet_ntoa(struct in_addr adr); // 성공 시 변환된 문자열의 주소 값, 실패 시 -1 반환
+인자로 전달된 정수형태의 IP정보를 참조하여 문자열 형태의 IP정보로 변환해서, 변환된 문자열의 주소값을 반환한다.
+문자열의 주소 값이 반환된다는 것은 이미 문자열이 메모리공간에 저장되었다는 뜻.
+이 함수는 프로그래머에게 메모리공간의 할당을 요구하지 않는다.
+대신에 함수 내부적으로 메모리공간에공간을 할당해서 변환된 문자열 정보를 저장한다.
+함수호출 후에는 가급적 반환된 문자열 정보를 다른 메모리 공간에 복사해두는 것이 좋다.
+다시 호출하면 전에 저장된 문자열 정보가 지워질 수 있기 때문.
+inet_ntoa 함수가 재호출되기 전까지만 반환된 문자열의 주소 값이 유효하니, 오랫동안 문자열 정보를 유지해야 한다면
+별도의 메모리 공간에 복사를 해둬야 한다.
+inet_ntoa.c
+
+인터넷 주소의 초기화
+struct sockaddr_in addr; 
+char* serv_ip = "211.217.168.13"; // IP주소 문자열 선언
+char* serv_port = "9190"; //PORT번호 문자열 선언
+memset(&addr, 0, sizeof(addr)); //구조체 변수 addr의 모든 멤버 0으로 초기화
+addr.sin_family = AF_INET; // 주소체계 지정
+addr.sin_addr.s_addr = inet_addr(serv_ip); // 문자열 기반의 IP주소 초기화
+addr.sin_port = htons(atoi(serv_port)); // 문자열 기반의 PORT번호 초기화
+memset은 동일한 값으로 바이트단위 초기화를 할 때 호출되는 함수이다.
+addr을 전부 0으로 초기호하는 이유는, 0으로 초기화해야 하는 sockaddr_in 구조체 멤버 sin_zero를 0으로 초기화하기 위함.
+atoi는 문자열로 표현되어 있는 값을 정수로 변환해서 반환한다.
+IP와 PORT는 main 함수에 IP와 PORT번호를 전달하도록 작성하는 것이 좋다.
+
+클라이언트의 주소정보 초기화
+서버 프로그램의 외침은 bind 함수를 통해, 클라이언트 프로그램의 외침은 connect 함수를 통해.
+서버 프로그램에서는 sockaddr_in 구조체 변수를 하나 선언해서, 서버 소켓이 동작하는 컴퓨터의 IP와 소켓에 부여할 PORT번호로 초기화한 다음에 bind호출.
+클라이언트 프로그램에서는 sockaddr_in 구조체 변수를 하나 선언해서, 이를 연결할 서버 소켓의 IP주소와 PORT번호로 초기화한 다음에 connect 호출.
+
+INADDR_ANY
+매번 서버의 IP주소를 입력하는 것은 귀찮다.
+addr.sin_addr.s_addr = htonl(INADDR_ANY);
+소켓이 동작하는 컴퓨터의 IP주소가 자동으로 할당되기 때문에 IP주소를 직접 입력하는 수고를 덜 수 있다.
+라우터 같이 Multi-homed(두 개 이상의 IP를 할당 받아 사용하는 경우)에서 할당 받은 IP 중 어떤 주소를 통해서 데이터가 들어오더라도 PORT 번호만 일치하면 수신.
+
+서버 소켓 생성시 IP주소가 필요한 이유
+서버 소켓은 생성시 자신이 속한 컴퓨터의 IP주소로 초기화가 이뤄져야 한다.
+하나의 컴퓨터에 둘 이상의 IP주소가 할당될 수 있어 초기화하는 것.
+IP주소는 컴퓨터에 장착되어 있는 NIC의 개수만큼 부여가 가능하다.
+서버 소켓이라 할지라도 어느 IP주소로 들어오는 데이터를 수신할지 결정해야 한다.
+그래서 서버 소켓의 초기화 과정에서 IP주소 정보를 요구하는 것.
+NIC가 하나뿐인 컴퓨터라면 INADDR_ANY를 이용해서 초기화하는 것이 편리하다.
+
+Chapter01의 hello_server.c, hello_client.c의 실행에 대한 고찰
+127.0.0.1을 가리켜 loopback address라 하며 이는 컴퓨터 자신의 IP주소를 의미한다.
+서로 다른 두대의 컴퓨터에서 실행할 경우에는 서버의 IP주소를 입력하면 된다.
+
+소켓에 인터넷 주소 할당하기
+초기화된 주소정보를 소켓에 할당
+#include <sys/socket.h>
+int bind(int sockfd, struct sockaddr* myaddr, socklen_t addrlen); // 성공 시 0, 실패 시 -1 반환
+sockfd:주소정보를(IP, PORT) 할당할 소켓의 파일 디스크립터
+myaddr:할당하고자 하는 주소정보를 지니는 구조체 변수의 주소 값.
+addrlen:두 번째 인자로 전달된 구조체 변수의 길이 정보.
+첫 번째 인자에 해당하는 소켓에 두 번째 인자로 전달된 주소정보가 할당된다.
+
+서버 소켓 초기화 과정
+int serv_sock;
+struct sockaddr_in serv_addr;
+char* serv_port = "9190";
+// 서버 소켓(리스닝 소켓) 생성
+serv_sock = socket(PF_INET, SOCK_STREAM, 0);
+// 주소 정보 초기화
+memset(&serv_addr, 0, sizeof(serv_addr));
+serv_addr.sin_family = AF_INET;
+serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+serv_addr.sin_port = htons(atoi(serv_port));
+// 주소 정보 할당
+bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+보이지 않는 오류처리에 대한 코드는 추가로 포함.
+
+03-5 윈도우 기반으로 구현하기
+함수 htons, htonl의 윈도우 기반 사용 예
+endian_conv_win.c
+
+함수 inet_addr, inet_ntoa의 윈도우 기반 사용 예
+윈도우에는 inet_aton 함수가 존재하지 않는다.
+inet_adrconv_win.c
+중괄호를 삽입하면 해당 영역의 시작부분에 지역변수를 선언할 수 있다.
+이렇게 선언된 지역변수는 중괄호를 빠져나가면 소멸이 된다.
+
+윈도우에서 소켓에 인터넷 주소 할당하기
+SOCKET servSock;
+struct sockaddr_in servAddr;
+char* servPort = "9190";
+// 서버 소켓 생성
+servSock = socket(PF_INET, SOCK_STREAM, 0);
+// 주소정보 초기화
+memset(&servAddr, 0, sizeof(servAddr));
+servAddr.sin_family = AF_INET;
+servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+servAddr.sin_port = htons(atoi(servPort));
+// 주소정보 할당
+bind(servSock, (struct sockaddr*)&servAddr, sizeof(servAddr));
+
+WSAStringToAddress & WSAAddressToString
+inet_ntoa, 그리고 inet_addr 함수와 기능은 같으나 다양한 프로토콜에 적용이 가능하다.
+IPv6에서도 가능하다.
+윈도우에 종속적인 코드가 만들어지기에 다른 운영체제로의 이식성이 떨어진다.
+주소정보를 나타내는 문자열을 가지고 주소정보 구조체 변수를 적절히 채워 넣을 때 호출하는 함수
+#Include <winsock2.h>
+INT WSAStringToAddress(LPTSTR AddressString, INT AddressFamily, LPWSAPROTOCOL_INFO lpProtocolInfo, LPSOCKADDR lpAddress, LPINT lpAddressLength);
+// 성공 시 0, 실패 시 SOCKET_ERROR 반환
+AddressString:IP와 PORT번호를 담고 있는 문자열의 주소 값 전달.
+AddressFamily:첫 번째 인자로 전달된 주소정보가 속하는 주소체계 정보전달.
+lpProtocolInfo:프로토ㅗ콜 Provider 설정, 일반적으로 NULL 전달.
+lpAddress:주소정보를 담을 구조체 변수의 주소 값 전달.
+lpAddressLength:네 번째 인자로 전달된 주소 값의 변수 크기를 담고 있는 변수의 주소 값 전달.
+구조체 변수에 저장된 데이터를 참조하여 주소정보를 담고 있는 문자열을 만들어서 반환한다.
+#include <winsock2.h>
+INT WSAAddressToString(LPSOCKADDR lpAddress, DWORD dwAddressLength, LPWSAPROTOCOL_INFO lpProtocolInfo, LPTSTR lpszAddressString, LPDWORD lpdwAddressTringLength);
+// 성공 시 0, 실패 시 SOCKET_ERROR 반환
+lpsaAddress:문자열로 변환할 주소정보를 지니는 구조체 변수의 주소 값 전달.
+dwAddressLength:첫 번째 인자로 전달된 구조체 변수의 크기 전달.
+lpProtocolInfo:프로토콜 Provider 설정, 일반적으로 NULL 전달.
+lpszAddressString:문자열로 변환된 결과를 저장할 배열의 주소 값 전달.
+lpdwAddressStringLength:네 번째 인자로 전달된 주소 값의 배열 크기를 담고 있는 변수의 주소 값 전달.
+conv_addr_win.c
+typedef struct sockaddr_in SOCKADDR_IN;
+
+
