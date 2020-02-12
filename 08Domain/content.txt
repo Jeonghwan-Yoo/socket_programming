@@ -1,0 +1,94 @@
+08-1 Domain Name System
+IP주소와 도메인 이름 사이에서의 변환을 수행하는 시스템을 DNS라하며, 중심에는 DNS 서버가 있다.
+
+도메인 이름이란?
+서비스를 제공하는 서버들도 IP주소로 구분이 된다.
+기억하기도 좋고 표현하기도 좋은 형태의 도메인 이름이라는 것을 IP주소에 부여해서, IP주소를 대신하도록 하고 있다.
+
+DNS 서버
+도메인 이름은 해당 서버에 부여된 가상의 주소이지 실제주소가 아니다.
+가상의 주소를 실제주소로 변환하는 과정을 거쳐 접속해야 한다.
+DNS 서버에게 변환을 요청하면 된다.
+모든 컴퓨터에는 디폴트 DNS 서버의 주소가 등록되어 있는데, 이를 통해 도메인 이름에 대한 IP 주소 정보를 얻게 된다.
+인터넷 브라우저는 해당 도메인 이름의 IP주소를 디폴트 DNS 서버를 통해 얻게 되고, 실제 접속에 들어가는 것.
+
+ping & nslookup
+서버의 도메인 이름은 사업적인 목적이 아니라면 변경하지 않는다.
+그러나 서버의 IP주소는 상대적으로 쉽게 바뀔 수 있다.
+ping www.naver.com을 콘솔에 입력하면 해당 도메인의 IP주소를 확인할 수 있다.
+ping은 목적지에 IP 데이터그램이 수신되는지 확인할 때 사용하는 명령어.
+ping은 IP주소로의 변환과정을 거치면서 해당 해당 서버의 IP를 함께 보이기 때문에 확인할 수 있다.
+컴퓨터에 등록되어 있는 디폴트 DNS 서버의 주소를 알고 싶다면 nslookup.
+
+컴퓨터에 설정되어 있는 디폴트 DNS 서버가 모든 도메인의 IP주소를 알고 있지는 않다.
+그러나 디폴트 DNS 서버는 모르면 물어서라도 가르쳐준다.
+Local Area Network(Default DNS Server) -> DNS Server -> Root DNS Server -> DNS Server -> Local Area Network(Default DNS Server, Destination Server)
+디폴트 DNS 서버는 자신이 모르는 정보에 대한 요청이 들어오면 한단계 상위 계층에 있는 DNS 서버에게 물어본다.
+올라가다 보면 최상위 DNS 서버인 Root DNS 서버에게까지 질의가 전달되는데, Root DNS 서버는 해당 질문을 누구에게 재전달해야할지 알고 있다.
+그래서 하위에 있는 DNS 서버에게 다시 질의를 던져 IP주소를 알아내면 반대 방향으로 전달되어 질의를 시작한 호스트에게 IP주소가 전달된다.
+DNS는 계층적으로 관리되는 일종의 분산 데이터베이스 시스템이다.
+
+08=2 IP주소와 도메인 이름 사이의 변환
+프로그램상에서 도메인 이름을 쓸 필요가 있는가?
+시스템을 운영하는 동안에 IP주소를 계속 유지하는 것이 쉬운 일은 아니다.
+시스템과 관련된 여러 가지 이유로 IP주소의 변경은 언제든지 발생할 수 있다.
+IP주소는 도메인 이름에 비해 상대적으로 변경의 확률이 높다.
+때문에 IP주소를 바탕으로 프로그램을 작성하는 것은 좋은 방법이 아니다.
+도메인 이름은 일단 등록하고나면 평생 유지가 가능하다.
+그러면 프로그램이 실행될 때마다 도메인 이름을 근거로 IP주소를 얻어온 다음에 서버에 접속을 하게 되니, 서버의 IP주소로부터 클라이언트 프로그램은 자유로울 수 있다.
+그래서 IP주소와 도메인 이름 사이의 변환함수가 필요한 것이다.
+
+도메인 이름을 이용해서 IP주소 얻어오기
+#include <netdb.h>
+struct hostent* gethostbyname(const char* hostname); // 성공 시 hostent 구조체 변수의 주소 값, 실패 시 NULL 포인터 반환
+변환하고자 하는 도메인의 이름을 문자열 형태로 전달하면 해당 도메인의 IP주소정보가 반환된다.
+struct hostent {
+    char* h_name; // official name
+    char** h_aliases; // alias list
+    int h_addrtype; // host address type
+    int h_length' // address length
+    char** h_addr_list; // address list
+}
+도메인 이름을 IP로 변환하는 경우에는 h_addr_list만 신경 써도 된다.
+
+h_name
+Official domain name이 저장된다.
+해당 홈페이지를 대표하는 도메인 이름이지만 등록되지 않은 경우가 많다.
+
+h_aliases
+하나의 IP에 둘 이상의 도메인 이름을 지정하는 것이 가능하기 때문에, 공식 도메인 이름 이외에 해당 메인 페이지에 접속할 수 있는 다른 도메인 이름의 지정이 가능하다.
+
+h_addrtype
+gethostbyname은 IPv4뿐만 아니라 IPv6까지 지원한다.
+h_addr_list로 반환된 IP주소의 주소체계에 대한 정보를 이 멤버를 통해 반환한다.
+IPv4의 경우 이 멤버에는 AF_INET이 저장된다.
+
+h_length
+반횐된 IP주소의 크기정보가 담긴다.
+IPv4경우에는 4바이트이므로 4가 저장되고, IPv6은 16바이트이므로 16이 저장된다.
+
+h_addr_list
+이 멤버를 통해서 도메인 이름에 대한 IP주소가 정수의 형태로 반환된다.
+접속자수가 많은 서버는 하나의 도메인 이름에 대응하는 IP를 여러 개 둬서, 둘 이상의 서버로 부하를 분산시킬 수 있는데,
+이 멤버를 통해서 모든 IP의 주소정보를 얻을 수 있다.
+h_name -------> official hostname\0
+h_aliases ----> alias #1\0
+                alias #2\0
+                alias #3\0
+                NULL
+h_addrtype
+h_length
+h_addr_list --> IP addr #1                
+                IP addr #2
+                IP addr #3
+                NULL
+gethostbyname.c
+h_addr_list가 가리키는 것은 문자열 포인터 배열(둘 이상의 문자열 주소 값으로 구성된 배열)이다.
+그러나 문자열 포인터 배열이 실제 가리키는 것은 문자열의 주소 값이 아닌 in_addr 구조체 변수의 주소 값이다.
+h_addr_list ----> char* ----> in_addr 구조체 변수, IP addr #1
+                  char* ----> in_addr 구조체 변수, IP addr #2
+                  NULL
+
+왜 in_addr*이 아닌 char* 인가요?
+hostent는 IPv4만을 위해 정의된 구조체가 아니다. IPv6 기반의 주소 정보가 저장될 수도 있다.
+일반화를 위해서 char형 포인터 배열로 선언한 것.
