@@ -1,0 +1,161 @@
+09-1 소켓의 옵션과 입출력 버퍼의 크기
+소켓이 지니는 다양한 특성을 파악하고, 그 특성을 필요에 맞게 변경하는 것은 데이터 송수신만큼이나 중요하다.
+
+소켓의 다양한 옵션
+Protocol Level      Option Name       Get Set
+SOL_SOCKET          SO_SNDBUF          O   O
+                    SO_RCVBUF          O   O
+                    SO_REUSERADDR      O   O
+                    SO_KEEPALIVE       O   O
+                    SO_BROADCAST       O   O
+                    SO_DONTROUTE       O   O
+                    SO_OOBINLINE       O   O
+                    SO_ERROR           O   X
+                    SO_TYPE            O   X
+IPPROTO_IP          IP_TOS             O   O
+                    IP_TTL             O   O
+                    IP_MULTICAST_TTL   O   O
+                    IP_MULTICAST_LOOP  O   O
+                    IP_MULTICAST_IF    O   O
+IPPROTO_TCP         TCP_KEEPALIVE      O   O
+                    TCP_NODELAY        O   O
+                    TCP_MAXSEG         O   O
+소켓의 옵션은 계층별로 분류된다.
+IPPROTO_IP레벨의 옵션들은 IP 프로토콜에 관련된 사항들.
+IPPROTO_TCP 레벨의 옵션들은 TCP 프로토콜에 관련된 사항들.
+SOL_SOCKET레벨의 옵션들은 소켓에 대한 가장 일반적인 옵션들.
+
+getsockpot & setsockopt
+거의 모든 옵션은 설정상태의 Get 및 Set이 가능하다.
+#include <sys/socket.h>
+int getsockopt(int sock, int level, int optname, void* optval, socklen_t* optlen); // 성공 시 0, 실패 시 -1 반환
+sock:옵션확인을 위한 소켓의 파일 디스크립터 전달.
+level:확인할 옵션의 프로토콜 레벨 전달.
+optname:확인할 옵션의 이름 전달.
+optval:확인결과의 저장을 위한 버퍼의 주소 값 전달.
+optlen:optval로 전달된 주소 값의 버퍼크기를 담고 있는 변수의 주소 값 전달, 함수호출이 완료되면 이 변수에는 네 번째 인자를 통해
+반환된 옵션정보의 크기가 바이트 단위로 계산되어 저장된다.
+#include <sys/socket.h>
+int setsockopt(int sock, int level, int optname, const void* optval, socklen_t optlen); // 성공 시 0, 실패 시 -1 반환.
+sock:옵션변경을 위한 소켓의 파일 디스크립터 전달.
+level:변경할 옵션의 프로토콜 레벨 전달.
+optname:변경할 옵션의 이름 전달.
+optval:변경할 옵션정보를 저장한 버퍼의 주소 값 전달.
+optlen:optval로 전달된 옵션정보의 바이트 단위 크기 전달.
+sock_type.c
+소켓의 타입정보 확인을 위한 옵션 SO_TYPE은 확인만 가능하고 변경이 불가능한 대표적인 옵션.
+소켓의 타입은 소켓 생성시 한번 결정되면 변경이 불가능하다.
+
+SO_SNDBUF & SO_RCVBUF
+소켓이 생성되면 기본적으로 입력버퍼와 출력버퍼가 생성된다.
+SO_SNDBUF는 입력버퍼의 크기와 관련된 옵션
+SO_RCVBUF는 출력버퍼의 크기와 관련된 옵션
+이 두옵션을 이용해서 입출력 버퍼의 크기를 참조할 수 있을 뿐만 아니라, 변경도 가능하다.
+get_buf.c
+set_buf.c
+전혀 다른 결과를 보인다.
+입출력 버퍼는 상당히 주의 깊게 다뤄져야 하는 영역이다.
+그래서 요구대로 정확히 맞춰지지 않는다.
+흐름제어와 오류 발생시의 데이터 재전송을 위해 최소환의 버퍼는 존재해야 한다.
+
+09-2 SO_REUSERADDR
+Binding Error 발생
+reuseadr_eserver.c
+클라이언트 콘솔에서 Q메시지를 입력하거나 CTRL+C를 입력해서 프로그램을 종료시킨다.
+클라이언트 측에서 서버 측으로 종료를 먼저 알리게끔 한다.
+Q메시지를 입력하면 close 함수를 호출하게 되어 서버 측으로 FIN 메시지를 먼저 전송하면서 Four-way handshaking 과정을 거친다.
+CTRL+C도 마찬가지다.
+프로그램을 강제종료 할 경우에도 운영체제가 파일 및 소켓을 모두 닫아주는데, 이 과정에서 close 함수를 호출한 것과 마찬가지로 서버 측으로 FIN메시지가 전달된다.
+클라이언트가 먼저 연결종료를 요청하는 경우는 괜찮지만 서버에서 먼저 FIN 메시지를 전달하고 나면 서버의 재실행에 문제가 생긴다.
+동일한 PORT 번호를 기준으로 서버를 재실행하면 bind() error라는 메시지가 출력될 뿐 서버는 실행되지 않는다.
+그리고 3분 정도 지난 다음 재실행을 하면 정상적인 실행을 확인할 수 있다.
+
+Time-wait 상태
+호스트 A -------> 호스트 B : (FIN)SEQ 5000 ACK -
+호스트 A <------- 호스트 B : (ACK)SEQ 7500 ACK 5001
+호스트 A <------- 호스트 B : (FIN)SEQ 7501 ACK 5001
+호스트 A -------> 호스트 B : (ACK)SEQ 5001 ACK 7502, A는 Time-wait상태
+
+Four-way handshaking 이후에 소켓이 바로 소멸되지 않고 Time-wait 상태라는 것을 일정시간 거친다.
+Time-wait 상태는 먼저 연결의 종료를 요청한 호스트만 거친다.
+그래서 서버가 먼저 연결의 종료를 요청하면 바로 실행을 할 수 없는 것.
+소켓이 Time-wait 상태에 있는 동안에는 해당 소켓의 PORT 번호가 사용중인 상태이기 때문.
+
+클라이언트 소켓은 Time-wait 상태를 거치지 않나요?
+먼저 연결의 종료를 요청하면 해당 소켓은 반드시 Time-wait 상태를 거친다.
+클라이언트 소켓의 PORT 번호는 프로그램이 실행될 때마다 임의로 할당되기 때문에 유동적으로 할당되기 때문에 실경쓸 필요 없다.
+
+호스트 A가 Time-wait없이 종료된다면 호스트 B는 영원히 ACK메시지를 받지 못하게 된다.
+있다면 마지막 ACK 메시지를 재정송하게 되고, 호스트 B는 정상적으로 종료할 수 있게 된다.
+그래서 먼저 FIN 메시지를 전송한 호스트의 소켓은 Time-wait 과정을 거치는 것.
+
+주소의 재할당
+Time-wait은 바로 서버를 가동해야할 때 문제가 될 수 있고, 상황에 따라서 더 길어질 수 있어서 더 큰 문제로 이어질 수 있다.
+Four-way handshaking과정에서 마지막 데이터가 손실이 되면, 호스트 B는 FIN메시지를 재전송한다.
+FIN메시지를 수신한 호스트 A는 Time-wait 타이머를 재가동한다.
+네트워크의 상황이 원활하지 못한다면 언제까지 지속될지 모르는 일.
+해결책은 소켓의 옵션 중에서 SO_REUSERADDR의 상태를 변경하면 된다.
+이는 Time-wait 상태에 있는 소켓에 할당되어 있는 PORT번호를 새로 시작하는 소켓에 할당되게 끔 할 수 있다.
+SO_REUSEADDR의 디폴트 값은 0(FALSE)인데, 이는 Time-wait 상태에 있는 소켓의 PORT 번호는 할당이 불가능함을 의미.
+이 값을 1(TRUE)로 변경해주면 된다.
+optlen = sizeof(option);
+option = TRUE;
+setsockopt(serv_sock, SOL_SOCKET, SO_REUSERADDR, (void*)&option, optlen);
+
+09-3 TCP_NODELAY
+Nagle 알고리즘
+Nagle 알고리즘은 네트워크 상에서 돌아다니는 패킷들의 흘러 넘침을 막기 위해서 1984년에 제안된 알고리즘.
+Nagle 알고리즘은 앞서 전송한 데이터에 대한 ACK 메시지를 받아야만, 다음 데이터를 전송하는 알고리즘이다.
+기본적으로 TCP 소켓은 Nagle 알고리즘을 적용해서 데이터를 송수신한다.
+때문에 ACK가 수신될 때까지 최대한 버퍼링을 해서 데이터를 전송한다.
+첫 문자 'N'이 들어온 시점에서는 이전에 전송한 패킷이 없으므로(수신할 ACK가 없으므로) 바로 전송이 이뤄진다.
+그리고 문자 'N'에 대한 ACK를 기다리게 되는데, 기다리는 동안에 출력버퍼에는 문자열의 나머지 "agle"이 채워진다.
+이어서 문자 'N'에 대한 ACK를 수신하고 출력버퍼에 존재하는 데이터 "agle"을 하나의 패킷으로 구성해서 전송하게 된다.
+하나의 문자열 전송에 총 4개의 패킷이 송수신되었다.
+
+Nagle 알고리즘을 적용하지 않은 상태에서는 ACK의 수신에 상관없이 패킷의 전송이 이뤄지기 때문에 출력버퍼에 데이터가 전달되는 즉시 전송이 이뤄진다.
+"Nagle"의 전송에는 총 10개의 패킷이 송수신될 수 있다.
+Nagle 알고리즘을 적용하지 않으면 네트워크 Traffic에는 좋지 않은 영향을 미친다.
+1바이트를 전송하더라도 패킷에 포함되어야 하는 헤더정보의 크기가 수십 바이트에 이르기 때문이다.
+네트워크의 효율적인 사용을 위해서는 Nagle 알고리즘을 반드시 적용해야 한다.
+
+그러나 Nagle 알고리즘이 항상 좋은 것은 아니다.
+전송하는 데이터의 특성에 따라서 Nagle 알고리즘의 적용 여부에 따른 트래픽의 차이가 크지 않으면서도 Nagle 알고리즘을 적용하는 것보다 빠른 경우도 있다.
+용량이 큰 파일 데이터의 전송이 대표적인 예다.
+파일 데이터를 출력버퍼로 밀어 넣는 작업은 시간이 걸리지 않는다.
+때문에 Nagle 알고리즘을 적용하지 않아도 출력버퍼를 거의 꽉채운 상태에서 패킷을 전송하게 된다.
+패킷의 수가 크게 증가하지도 않을뿐더러, ACK를 기다리지 않고 연속해서 데이터를 전송하니 전송속도도 향상된다.
+데이터의 특성을 정확히 판단하지 않은 상태에서 Nagle 알고리즘을 중지하는 일은 없어야 한다.
+
+Nagle 알고리즘의 중단
+필요하다면 Nagle 알고리즘도 중단시켜야 한다.
+소켓옵션 TCP_NODELAY를 1(TRUE)로 변경해주면 된다.
+int opt_val = 1;
+setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void*)&opt_val, sizeof(opt_val));
+Nagle 알고리즘의 설정 상태를 확인하려면 TCP_NODELAY에 설정된 값을 확인하면 된다.
+int opt_val;
+socklen_t opt_len;
+opt_len = sizeof(opt_val);
+getsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void*)&opt_val, &opt_len);
+Nagle 알고리즘이 설정된 상태라면 함수호출의 결과로 변수 opt_val에는 0이 저장되며, 반대로 설정되지 않은 상태라면 1이 저장된다.
+
+09-4 윈도우 기반으로 구현하기
+#include <winsock2.h>
+int getsockopt(SOCKET sock, int level, int optname, char* optval, int* optlen); // 성공 시 0, 실패 시 SOCKET_ERROR 반환
+sock:옵션확인을 위한 소켓의 핸들 전달.
+level:확인할 옵션의 프로토콜 레벨 전달.
+optname:확인할 옵션의 이름 전달.
+optval:확인결과의 저장을 위한 버퍼의 주소 값 전달.
+optlen:optval로 전달된 주소 값의 버퍼 크기를 담고 있는 변수의 주소 값 전달, 함수호출이 완료되면 이 변수에는
+네 번째 인자를 통해 반환된 옵션 정보의 크기가 바이트 단위로 계산되어 저장된다.
+주의할 것은 매개변수 optval의 자료형이 char형 포인터라는 것.
+#include <winsock2.h>
+int setsockopt(SOCKET sock, int level, int optname, const char* optval, int optlen); // 성공 시 0, 실패 시 SOCKET_ERROR 반환
+sock:옵션변경을 위한 소켓의 핸들 전달.
+level:변경할 옵션의 프로토콜 레벨 전달.
+optname:변경할 옵션의 이름 전달.
+optval:변경할 옵션정보를 저장한 버퍼의 주소 값 전달.
+optlen:optval로 전달된 옵션정보의 바이트 단위 크기 전달.
+buf_win.c
+시스템에 따라 결과는 달라질 수 있다.
+시스템의 디폴트 입출력 버퍼의 크기와 입출력 버퍼 크기의 변경요청에 따라서 실제 변경된 입출력 버퍼의 크기를 확인할 수 있다.
