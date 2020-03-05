@@ -61,4 +61,88 @@ SyncCS_win.c
 매우 많은 수의 CS 오브젝트 획득 및 반납이 이뤄지기 때문.
 
 20-2 커널모드 동기화 기법
+대표적인 커널모드 동기화 기법에는 Event, Semaphore, Mutex라는 커널 오브젝트 기반의 동기화가 있다.
 
+Mutex(Mutual Exclusion) 오브젝트 기반 동기화
+열쇠에 비유해서 이해할 수 있다.
+#include <windows.h>
+HANDLE CreateMutex(LPSECURITY_ATTRIBUTES lpMutexAttributes, BOOL bInitialOwner, LPCTSTR lpName); // 성공 시 생성된 Mutex 오브젝트의 핸들, 실패시 NULL.
+lpMutexAttributes:보안관련 특성 정보의 전달, 디폴트 보안설정을 위해서 NULL 전달
+bInitialOwner:TRUE 전달 시, 생성되는 Mutex 오브젝트는 이 함수를 호출한 쓰레드의 소유가 되면서 non-signaled 상태가 된다.
+반면 FALSE 전달 시, 생성되는 Mutex 오브젝트는 소유자가 존재하지 않으며, signaled 상태로 생성된다.
+lpName:Mutex 오브젝트에 이름을 부여할 때 사용된다. NULL을 전달하면 이름없는 Mutex 오브젝트가 생성된다.
+Mutex 오브젝트는 소유자가 없는 경우에 signaled 상태가 된다.
+Mutex는 커널 오브젝트이기 때문에 다음 함수의 호출을 통해서 소멸이 이뤄진다.
+#include <windows.h>
+BOOL CloseHandle(HANDLE hObject); // 성공 시 TRUE, 실패 시 FALSE 반환
+hObject:소멸하고자 하는 커널 오브젝트의 핸들 전달.
+커널 오브젝트를 소멸하는 함수이기에 Semaphore와 Event의 소멸에도 사용된다.
+Mutex의 획득은 WaitForSingleObject의 함수호출을 통해서 이뤄진다.
+#include <windows.h>
+BOOL ReleaseMutex(HANDLE hMutex); // 성공 시 TRUE, 실패 시 FALSE 반환
+hMutex:반납할, 소유를 해제할 Mutex 오브젝트의 핸들 전달.
+Mutex는 소유되었을 때 non-signaled 상태가 되고, 반납되었을 때 signaled 상태가 되는 커널 오브젝트이다.
+그래서 Mutex의 소유여부를 확인할 때에는 WaitForSingleObject 함수를 이용할 수 있다.
+호출 후 블로킹 상태:Mutex 오브젝트가 다른 쓰레드에게 소유되어서 현재 non-signaled 상태에 놓여있는 상황
+호출 후 반환된 상태:Mutex 오브젝트의 소유가 해제되었거나 소유되지 않아서 signaled 상태에 놓여있는 상황.
+Mutex는 WaitForSingleObject 함수가 반환할 때, 자동으로 non-signaled 상태가 되는 auto-reset모드 커널 오브젝트이다.
+그래서 WaitForSingleObject함수가 결과적으로 Mutex를 소유할 때 호출하는 함수가 된다.
+WaitForSingleObject(hMutex, INFINITE);
+// 임계 영역의 시작
+// 임계 영역의 끝
+ReleaseMutex(hMutex);
+WaitForSingleObject 함수는 Mutex를 non-signaled 상태로 만들어서, 임계영역으로의 접근을 막기 때문에 임계영역의 진입로 역할을 할 수 있다.
+ReleaseMutex 함수는 Mutex 오브젝트를 다시 signaled 상태로 만들기 때문에 임계영역의 출구역할을 할 수 있다.
+SyncMutex_win.c
+
+Semaphore 오브젝트 기반 동기화
+Semaphore Value라는 정수를 기반으로 동기화가 이뤄지고, 이 값이 0보다 작아질 수 없다.
+윈도우의 Semaphore Value는 Semaphore 커널 오브젝트에 등록이 된다.
+생성에 사용되는 함수
+#include <windows.h>
+HANDLE CreateSemaphore(LPSECURITY_ATTRIBUTES lpSemaphoreAttributes, LONG lInitialCount, LONG lMaximumCount, LPCTSTR lpName); 
+// 성공 시 생성된 Semaphore 오브젝트의 핸들, 실패 시 NULL 반환
+lpSemaphoreAttributes:보안관련 정보의 전달, 디폴트 보안설정을 위해서 NULL 전달
+lInitialCount:세미포어의 초기 값 지정, 매개변수 lMaximumCount에 전달된 값보다 크면 안되고, 0이상이어야 한다.
+lMaximumcount:최대 세마포어의 값을 지정한다. 1을 전달하면 세마포어 값이 0 또는 1이 되는 바이너리 세마포어로 구성된다.
+lpName:Semaphore오브젝트에 이름을 부여할 때 사용. NULL을 전달하면 이름없는 Semaphore 오브젝트가 생성된다.
+소멸은 CloseHandle 함수를 이용해서 진행한다.
+
+세마포어 값이 0인 경우 non-signaled 상태가 되고, 0보다 큰 경우에 signaled 상태가 되는 특성을 이용해서 동기화가 진행된다.
+매개변수 lInitialCount에 0이 전달되면, non-signaled 상태의 Semaphore 오브젝트가 생성된다.
+여러 개의 쓰레드가 동시에 임계영역에 진입하는 유형의 동기화도 가능하다.
+#include <windows.h>
+BOOL ReleaseSemaphore(HANDLE hSemaphore, LONG lReleaseCount, LPLONG lpPreviousCount); // 성공 시 TRUE, 실패 시 FALSE 반환
+hSemaphore:반납할 Semaphore 오브젝트의 핸들 전달.
+lReleaseCount:반납은 세마포어 값의 증가를 의미, 증가되는 값의 크기를 지정할 수 있다. 세마포어의 최대 값을 넘어서게 되면, 값은 증가하지 않고 FALse가 반환된다.
+lpPreviousCount:변경 이전의 세마포어 값 저장을 위한 변수의 주소 값 전달, 불필요하다면 NULL 전달.
+Semaphore 오브젝트는 세마포어 값이 0보다 큰 경우에 signaled 상태가 되고, 0인 경우에 non-signaled 상태가 되기 때문에
+WaitForSingleObject 함수가 호출되면 세마포어 값이 0보다 큰 경우에 반환을 한다.
+반환이 되면 세마포어 값을 1 감소시키고 0이 되는 경우에 non-signaled 상태가 되게 한다.
+WaitForSingleObject(hSemaphore, INFINITE);
+// 임계영역의 시작
+// 임계영역의 끝
+ReleaseSemaphore(hSemaphore, 1, NULL);
+SyncSema_win.c
+
+Event 오브젝트 기반 동기화
+오브젝트의 생성과정에서, 자동으로 non-signaled 상태로 돌아가는 auto-reset 모드와 그렇지 않은 manual-reset 모드 중 선택할 수 있다.
+Event 오브젝트의 생성에 사용되는 함수
+#include <windows.h>
+HANDLE CreateEvent(LPSECURITY_ATTIBUTES lpEventAttributes, BOOL bManualReset, BOOL bInitialState, LPCSTR lpName);
+// 성공 시 생성된 Event 오브젝트의 핸들, 실패 시 NULL 반환
+lpEventAttributes:보안관련 정보의 전달, 디폴트 보안설정을 위해서 NULL 전달
+bManualReset:TRUE 전달 시 manual-reset 모드 Event, FALSE 전달 시 auto-reset 모드 Event 오브젝트 생성.
+bInitialState:TRUE 전달 시 signaled 상태의 Event 오브젝트 생성, FALSE 전달 시 non-signaled 상태의 Event 오브젝트 생성.
+lpName:Event 오브젝트에 이름을 부여할 때 사용된다. NULL을 전달하면 이름없는 Event 오브젝트가 생성된다.
+두 번째 매개변수에 TRUE가 전달되면 manual-reset 모드의 Event 오브젝트가 생성되고, 그러면 WaitForSingleObject 함수가 반환을 한다고 해서 non-signaled 상태로 되돌려지지 않는다.
+이러한 경우에는 명시적으로 오브젝트의 상태를 변경해야 한다.
+#include <windows.h>
+BOOL ResetEvent(HANDLE hEvent); // to the non-signaled
+BOOL SetEvent(HANDLE hEvent); // to the signaled
+// 성공 시 TRUE, 실패 시 FALSE 반환
+Event 오브젝트의 핸들을 인자로 전달하면서 non-signaled 상태로 변경하려면 ResetEvent 함수를, signaled 상태로 변경하려면 SetEvent 함수릃 호출하면 된다.
+SyncEvent_win.c
+둘 이상의 쓰레드가 동시에 대기상태를 빠져 나와야 하는 상황에서는 manual-reset 모드로 생성 가능한 Event 오브젝트가 좋은 선택이 될 수 있다.
+
+20-3 윈도우 기반의 멀티 쓰레드 서버 구현
