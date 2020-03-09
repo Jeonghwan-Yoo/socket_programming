@@ -1,0 +1,113 @@
+22-1 Overlapped IO 모델의 이해
+그전에는 IO가 아닌 Notification의 비동기였다.
+
+IO(입출력)의 중첩이란?
+비동기 IO가 사실상 Overlapped(중첩된) IO나 다름이 없다.
+하나의 쓰레드 내에서 동시에 둘 이상의 영역으로 데이터를 전송(또는 수신)함으로 인해서, 입출력이 중첩되는 상황을 IO의 중첩이라고 한다.
+이러한 일이 가능하려면 호출된 입출력 함수가 바로 반환을 해야 한다.
+비동기 IO가 가능하려면 호출되는 입출력 함수는 넌-블로킹 모드로 동작해야 한다.
+비동기와 중첩을 구분할 필요가 없다.
+
+Overlapped IO의 포커는 IO에 있지 않습니다.
+윈도우에서 말하는 Overlapped IO의 포커스는 IO가 아닌, IO가 완료된 상황의 확인방법에 있다.
+넌-블로킹 모드로 진행된다면, 이후에 완료결과를 별도로 확인해야 한다.
+즉, 윈도우에서 말하는 Overlapped IO는 입출력만을 뜻하는 것이 아니고, 입출력의 완료를 확인하는 방법까지 포함한 것이다.
+
+Overlapped IO 소켓의 생성
+제일먼저 할 일은 Overlapped IO에 적합한 소켓을 생성하는 것이다.
+#include <winsock2.h>
+SOCKET WSASocket(int af, int type, int protocol, LPWSAPROTOCOL_INFO lpProtocolInfo, GROUP g, DWROD dwFlags);
+// 성공 시 소켓의 핸들, 실패 시 INVALID_SOCKET 반환
+af:프로토콜 체계 정보 전달.
+type:소켓의 데이터 전송방식에 대한 정보 전달.
+protocol:두 소켓 사이에 사용되는 프로토콜 정보 전달.
+lpProtocolInfo:생성되는 소켓과 특성 정보를 담고 있는 WSAPROTOCOL_INFO 구조체 변수의 조소 값 전달. 필요 없는 경우 NULL 전달
+g:함수의 확장을 위해서 예약되어 있는 매개 변수, 따라서 0 전달.
+dwFlags:소켓의 속성정보 전달.
+Overlapped IO가 가능한 넌-블로킹 모드의 소켓이 생성된다.
+WSASocket(PF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED);
+
+Overlapped IO를 진행하는 WSASend 함수
+Overlapped IO 속성이 부여된 소켓의 생성 이후에 진행되는 두 소켓간의(서버, 클라이언트 간의) 연결과정은 일반소켓의 연결과정과 차이가 없다.
+그러나 데이터의 입출력에 사용되는 함수는 달리해야 한다.
+#include <winsock2.h>
+int WSASend(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesSent, DWORD dwFlags, LPWSAOVERLAPPED lpOverlapped, 
+LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine); // 성공 시 0, 실패 시 SOCKET_ERROR 반환
+s:소켓의 핸들 전달. Overlapped IO 속성이 부여된 소켓의 핸들 전달 시 Overlapped IO 모델로 출력 진행.
+lpBuffers:전송할 데이터 정보를 지니는 WSABUF 구조체 변수들로 이뤄진 배열의 주소 갑 전달.
+dwBufferCount:두 번째 인자로 전달된 배열의 길이정보 전달.
+lpNumberOfBytesSent:전송된 바이트 수가 저장될 변수의 주소 값 전달
+dwFlags:함수의 데이터 전송특성을 변경하는 경우에 사용. MSG_OOB를 전달하면 OOB 모드 데이터 전송.
+lpOverlapped:WSAOVERLAPPED 구조체 변수의 주소 값 전달. Event 오브젝트를 사용해서 데이터 전송의 완료를 확인하는 경우에 사용되는 매개변수.
+lpCompletionRoutine:Completion Routine이라는 함수의 주소 값 전달. 이를 통해서도 데이터 전송의 완료를 확인할 수 있다.
+이 구조체는 전송할 데이터를 담고 있는 버퍼의 주소 값과 크기정보를 저장할 수 있도록 정의되어 있다.
+typedef struct __WSABUF {
+    u_long len; // 전송할 데이터의 크기
+    char FAR *buf; // 버퍼의 주소 값
+} WSABUF, *LPWSABUF;
+데이터를 전송할 때에는 다음의 형태로 코드를 구성해야 한다.
+WSAEVENT event;
+WSAOVERLAPPED overlapped;
+WSABUF dataBuf;
+char buf[BUF_SIZE] = { "전송할 데이터" };
+int recvBytes = 0;
+...
+event = WSACreateEvent();
+memset(&overlapped, 0, sizeof(overlapped)); // 모든 비트 0으로 초기화
+overlapped.hEvent = event;
+dataBuf.len = sizeof(buf);
+dataBuf.buf =  buf;
+WSASend(hSocket, &dataBuf, 1, &recvBytes, 0, &overlapped, NULL); // 두 번째 인자로 전달된, 전송할 데이터를 달고 있는 버퍼의 정보가 하나이기에 1이다.
+...
+typedef struct __WSAOVERLAPPED {
+    DWORD Internal;
+    DWORD InternalHigh;
+    DWORD Offset;
+    DWORD offsetHigh;
+    WSAEVENT hEvent;
+} WSAOVERLAPPED, *LPWSAOVERLAPPED;
+Internal, InternalHigh는 Overlapped IO가 진행되는 과정에서 운영체제 내부적으로 사용되는 멤버.
+멤버 Offset, OffsetHigh도 사용이 에약되어 있는 멤버.
+실제로 관심을 둘 멤버는 hEvent가 전부.
+Overlapped IO를 진행하려면 WSASend 함수의 매개변수 lpOverlapped에는 항상 NULL이 아닌, 유효한 구조체 변수의 주소 값을 전달해야 한다.
+NULL이 전달되면, WSASend의 첫 번째 인자로 전달된 핸들의 소켓은 블로킹 모드로 동작하는 일반적인 소켓으로 간주된다.
+WSASend 함수호출을 통해서 동시에 둘 이상의 영역으로 데이터를 전송하는 경우에는 여섯 번째 인자로 전달되는 WSAOVERLAPPED 구조체 변수를 각각 별도로 구성해야 한다.
+이는 WSAOVERLAPPED 구조체 변수가 Overlapped IO의 진행과정에서 운영체제에 의해 참조되기 때문이다.
+
+WSASend 함수와 관련해서 한가지 더!
+사실 WSASend 함수라고 해서 무조건 함수의 반환과 데이터의 전송완료 시간이 불일치하는 것은 아니다.
+출력버퍼가 비어있고, 전송하는 데이터의 크기가 크기 않다면, 함수호출과 동시에 데이터의 전송이 완료될 수도 있다.
+이러한 경우에는 WSASend 함수가 0을 반환하고, 매개변수 lpNumberOfBytesSent로 전달된 주소의 변수에는 실제 전송된 데이터의 크기정보가 저장된다.
+반면 호출된 WSASend 함수가 반환을 한 다음에도 계속해서 데이터의 전송이 이뤄지는 상황이라면 WSASend 함수는 SOCKET_ERROR를 반환하고,
+WSAGetLastError 함수호출을 통해서 확인 가능한 오류코드로는 WSA_IO_PENDING이 등록된다.
+그리고 이 경우에는 다음 함수호출을 통해서 실제 전송된 데이터의 크기를 확인해야 한다.
+#include <winsock2.h>
+BOOL WSAGetOverlappedResult(SOCKET s, LPWSAOVERLAPPED lpOverlapped, LPDWORD lpcbTransfer, BOOL fWait, LPDWORD lpdwFlags); // 성공 시 TRUE, 실패 시 FALSE 반환
+s:Overlapped IO가 진행된 소켓의 핸들.
+lpOverlapped:Overlapped IO 진행 시 전달한 WSAOVERLAPPED 구조체 변수의 주소값 전달.
+lpcbTransfer:실제 송수신된 바이트 크기를 저장할 변수의 주소 값 전달.
+fWait:여전히 IO가 진행중인 상황의 경우, TRUE 전달 시 IO가 완료될 때까지 대기를 하게 되고, FALSE 전달 시 FALSE를 반환하면서 함수를 빠져 나온다.
+lpdwFlags:WSARecv함수가 호출된 경우, 부수적인 정보(수신된 메시지가 OOB 메시지인지와 같은)를 얻기 위해 사용된다. 불필요하면 NULL을 전달한다.
+이 함수는 데이터의 전송결과뿐만 아니라, 데이터 수신결과의 확인에도 사용되는 함수이다.
+
+Overlapped IO를 진행하는 WSARecv 함수
+#include <winsock2.h>
+int WSARecv(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesRecvd, LPDWORD lpFlags, LPWSAOVERLAPPED lpOverlapped,
+LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine); // 성공 시 0, 실패 시 SOCKET_ERROR 반환
+s:Overlapped IO 속성이 부여된 소켓의 핸들 전달.
+lpBuffers:수신된 데이터 정보가 저장될 버퍼의 정보를 지니는 WSABUF 구조체 배열의 주소값 전달.
+dwBufferCount:두 번째 인자로 전달된 배열의 길이정보 전달.
+lpNumberOfBytesRecvd:수신된 데이터의 크기정보가 저장될 변수의 주소 값 전달.
+lpFlags:전송특성과 관련된 정보를 지정하거나 수신하는 경우에 사용된다.
+lpOverlapped:WSAOVERLAPPED 구조체 변수의 주소 값 전달
+lpCompletoinRoutine:Completion Routine이라는 함수의 주소 값 전달.
+지금까지는 데이터 입출력 방법이었고 이후에는 IO의 완료 및 결과를 확인하는 방법이다.
+
+Gather/Scatter IO
+여러 버퍼에 존재하는 데이터를 모아서 한번에 전송하고(Gather 출력), 수신된 데이터를 여러 버퍼에 나눠서 저장하는(Scatter 입력)것을 가리켜 Gather/Scatter IO라 한다.
+writev & readv함수가 Gather/Scatter IO 기능을 하는 함수들이다.
+이 함수들은 윈도우에 정의되어 있지 않다.
+하지만 Overlapped IO에서 사용하는 WSASend와 WSARecv 함수를 사용하면 가능하다.
+두 번째 인자와 세 번째 인자를 통해 가능하다.
+
+22-2 Overlapped IO에서의 입출력 완료의 확인
