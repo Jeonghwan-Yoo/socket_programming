@@ -111,3 +111,37 @@ writev & readv함수가 Gather/Scatter IO 기능을 하는 함수들이다.
 두 번째 인자와 세 번째 인자를 통해 가능하다.
 
 22-2 Overlapped IO에서의 입출력 완료의 확인
+Overlapped IO에서 입출력의 완료 및 결과를 확인하는 방법에는 두 가지가 있다.
+1. WSASend, WSARecv 함수의 여섯 번째 매개변수 활용 방법, Event 오브젝트 기반
+2. WSASend, WSARecv 함수의 일곱 번째 매개변수 활용 방법, Completion Routine 기반
+
+Event 오브젝트 사용하기
+IO가 완료되면 WSAOVERLAPPED 구조체 변수가 참조하는 Event 오브젝트가 signaled 상태가 된다.
+IO의 완료 및 결과를 확인하려면 WSAGetOverlappedResult 함수를 사용한다.
+OverlappedSend_win.c
+
+WSAGetLastError는 소켓관련 함수가 호출된 이후에 발생하는 오류의 원인 정보를 반환한다.
+#include <winsock2.h>
+int WSAGetLastError(void); // 오류상황에 대한 상태 값(오류의 원인을 알리는 값) 반환
+반환 값 WSA_IO_PENDING을 통해서 WSASend 함수의 호출결과가 오류상황이 아닌, 완료되지 않은 상황임을 확인할 수 있었다.
+OverlappedRecv_win.c
+
+Completion Routine 사용하기
+Completion Routine은 Pending된 IO가 완료되면, 이 함수를 호출해 달라는 의미를 갖는다.
+IO가 완료되었을 때, 자동으로 호출된 함수를 등록하는 형태로 IO 완료 이후의 작업을 처리하는 방식이 Completion Routine을 활용하는 방식이다.
+매우 중요한 작업을 진행중인 상황에서 갑자기 Completoin Routine이 호출되면 프로그램의 흐름을 망칠 수 있다.
+그래서 운영체제는 IO를 요청한 쓰레드가 alertable wait 상태에 놓여있을 때만 Completion Routine을 호출한다.
+alertable wait 상태라는 것은 운영체제가 전달하는 메시지의 수신을 대기하는 쓰레드의 상태를 뜻하며, 다음 함수가 호출된 상황에서 쓰레드는 alertable wait 상태가 된다.
+WaitForSingleObjectEx, WaitForMultipleObjectEx, WSAWaitForMultipleEvents, SleepEx.
+1, 2, 4번째 함수는 기존함수와 동일한 기능을 제공하고 매개변수가 마지막에 하나 더 추가되어 있는데, 이 매개변수에 TRUE를 전달하면 해당 쓰레드는 alertable wait상태가 된다.
+그리고 3번째 함수도 마지막 매개변수로 TRUE가 전달되면 해당 쓰레드는 alertable wait 상태가 된다.
+따라서 IO를 진행시킨 다음에, 급한 다른 볼일들을 처리하고 나서, IO가 완료되었는지 확인하고 싶을 때 위의 함수들 중 하나를 호출하면 된다.
+그러면 운영체제는 쓰레드가 alertable wait 상태에 진입한 것을 인식하고, 완료된 IO가 있다면 이에 해당하는 Completion Routine을 호출해 준다.
+Completion Routine이 실행되면, 모두 WAIT_IO_COMPLETION을 반환하면서 함수를 빠져 나오고 그 다음부터 실행을 이어나간다.
+CmplRoutinesRecv_win.c
+void CALLBACK CompletionROUTINE(DWORD dwError, DWORD cbTransferred, LPWSAOVERLAPPED lpOverlapped, DWORD dwFlags);
+dwError:오류정보(정상종료 시 0전달)
+cbTransferred:완료된 입출력 데이터의 크기정보가 전달된다.
+lpOverlapped:WSASend, WSARecv 함수의 매개변수 lpOverlapped로 전달된 값.
+dwFlags:입출력 함수호출 시 전달된 특성정보 또는 0이 전달.
+CALLBACK은 쓰레드의 main 함수에 선언되는 키워드인 WINAPI와 마찬가지로 함수의 호출규약을 선언한 것으로 Completion Routine을 정의 하는 경우 반드시 삽입.
