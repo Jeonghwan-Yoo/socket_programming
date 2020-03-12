@@ -1,0 +1,49 @@
+윈도우 기반 IO 모델 중에서 가장 성능이 우수.
+
+23-1 Overlapped IO를 기반으로 IOCP 이해하기
+논의가 한참인 epoll과 IOCP의 성능비교
+select와 같은 전통적인 IO 모델의 한계극복을 목적으로, 운영체제 레벨(커널 레벨)에서 성능을 향상시킨 IO모델이 운영체제 별로 등장하였다.
+대표적인 것이 리눅스의 epoll, BSD의 kqueue 그리고 윈도우의 IOCP이다.
+공통적인 특성은 운영체제에 의해서 기능이 지원 및 완성된다는 것.
+서버의 응답시간과 동시접속자 수는 매우 중요한 요소이다.
+하드웨어의 성능이나, 할당된 대역폭이 충분한 상황에서 응답시간이나, 동시접속자 수에 문제가 발생하면 이 둘을 수정함으로써 대부분의 문제를 해결한다.
+1. 비효율적인 IO의 구성 또는 비효율적인 CPU의 활용
+2. 데이터베이스의 설계내용과 Query의 구성
+다른 IO 모델에 없는 장점이 IOCP에 있긴 하지만, 서버의 성능을 좌우하는 절대적 기준은 아니며, 모든 상황에서 부각되는 것도 아니다.
+이들의 성능을 좌우하는 것은 운영체제의 내부 동작방식에 있기도 하다.
+
+넌-블로킹 모드의 소켓 구성하기
+윈도우에서는 다음의 함수호출을 통해서 넌-블로킹 소켓의 속성을 변경한다.
+SOCKET hLisnSock;
+int mode = 1;
+...
+hLisㄴㄷnSock = WSASocket(PF_INET, SOCK_STREAM, 0, NULL, WSA_FLAG_OVERLAPPED);
+ioctlsocket(hLisnSock, FIONBIO, &mode); // for non-blocking SOCKET
+...
+ioctlsocket함수는 소켓의 IO방식을 컨트롤하는 함수이다.
+의미하는 바는 핸들 hLisnSock이 참조하는 소켓의 입출력 모드(FIONBIO)를 변수 mode에 저장된 값의 형태로 변경한다.
+세 번째 인자로 전달된 주소 값의 변수에 0이 저장되어 있으면 블로킹 모드로, 0이 아닌 값이 저장되어 있으면 넌-블로킹 모드로 소켓의 입출력 속성을 변경한다.
+속성이 넌-블로킹 모드로 변경되면, 넌-블로킹 모드로 입출력되는 것 이외의 다음의 특징도 지니게 된다.
+1. 클라이언트의 연결요청이 존재하지 않는 상태에서 accept 함수가 호출되면 INVALID_SOCKET이 곧바로 반환된다.
+그리고 이어서 WSAGetLastError 함수를 호출하면 WSAEWOULDBLOCK가 반환된다.
+2. accept 함수호출을 통해서 새로 생성되는 소켓 역시 넌-블로킹 속성을 지닌다.
+따라서 넌-블로킹 입출력 소켓을 대상으로 accept 함수를 호출해서 INVALID_SOCKET이 반환되면, WSAGetLastError함수의 호출을 통해서 
+INVALID_SOCKET이 반환된 이유를 확인하고, 그레 적절한 처리를 해야만 한다.
+
+Overlapped IO만 가지고 에코 서버 구현하기
+넌-블로킹 소켓의 생성방법은 Overlapped IO기반의 서버구현에 필요하다.
+Overlapped IO만 가지고 서버를 구현하는 경우는 매우 드물다.
+IOCP를 정확히 이해하기 위해서는 Overlapped IO만 가지고 섭를 구현해 봐야 한다.
+굳이 IOCP를 적용하지 않더라도, Overlapped IO만 가지고도 IOCP와 유사한 형태로 동작하는 서버를 구현할 수 있어야 한다.
+그러면 다른 운영체제 기반에서도 IOCP와 유사한 방식으로 동좍하는 서버를 구현할 수 있고, 서버의 실제 기능 구현할 수 있다.
+CmplRouEchoServ_win.c
+구조체 변수에 담겨있는 정보만 참조해도 데이터의 송수신이 가능하도록 구조체를 정의.
+클라이어트가 연결되면 WSARecv 함수를 호출하면서 넌-블로킹 모드로 데이터가 수신하게 되고, 수신이 완료되면 ReadCompRoutine 함수가 호출된다.
+ReadCompRoutine 함수가 호출되면 WSASend 함수를 호출하면서 넌-블로킹 모드로 데이터가 송신되게 하고, 송신이 완료되면 WriteCompRoutine 함수가 호출되게 한다.
+그런데 WrtieCompRoutine 함수는 다시 WSARecv 함수를 호출하면서 넌-블로킹모드로 데이터의 수신을 기다린다.
+ReadCompRoutine함수와 WriteCompRoutine 함수가 번갈아 호출되면서 데이터의 수신과 송신을 반복하도록 구성하였다.
+클라이언트가 하나 늘때마다 추가로 생성도는 소켓의 핸들과 버퍼 정보를 ReadCompRoutine 함수와 WriteCompRoutine 함수에 전달하기 위해서 PER_IO_DATA 구조체를 정의,
+이 구조체의 변수의 주소 값은 WSAOVERLAPPED 구조체의 멤버 hEvent에 저장되어 Completion Routine 함수에 전달되게끔 하였다.
+입출력 완료 시 자동으로 호출되는 Completion Routine 내부로 클라이언트 정보(소켓과 버퍼)를 전달하기 위해서 WSAOVERLAPPED 구조체 멤버 hEvent를 사용하였다.
+
+클라이언트의 재구현
