@@ -95,7 +95,6 @@ void CALLBACK ReadCompRoutine(DWORD dwError, DWORD szRecvBytes, LPWSAOVERLAPPED 
     SOCKET hSock = hbInfo->hClntSock;
     LPWSABUF bufInfo = &(hbInfo->wsaBuf);
     DWORD sentBytes;
-
     // EOF의 수신을 의미하므로, 그에 따른 처리를 해야 한다.
     if (szRecvBytes == 0) {
         closesocket(hSock);
