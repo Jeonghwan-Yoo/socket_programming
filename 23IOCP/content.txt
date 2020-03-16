@@ -66,3 +66,73 @@ IOCP는 IO의 전달을 위해 최소 하나 이상의 쓰레드 생성을 요�
 쓰레드의 생성보다는 다음 두 가지 관점에서 관찰
 1. 입력과 출력인 넌-블로킹 모드로 동작하는거?
 2. 넌-블로킹 모드로 진행된 입력과 출력의 완료는 어떻게 확인하는가?
+
+23-2 IOCP의 단계적 구현
+Completion Port의 생성
+IOCP에서는 완료된 IO의 정보가 Completion Port 오브젝트(CP)라는 커널 오브젝트에 등록된다.
+그런데 그냥 등록되는 것이 아니기 때문에 다음과 같은 요청의 과정이 선행되어야 한다.
+이 소켓을 기반으로 진행되는 IO의 완료 상황은 CP 오브젝트에 등록해주세요.
+이를 소켓과 CP오브젝트와의 연결 요청이라 한다.
+IOCP 모델의 서버 구현을 위해서는 Completion Port 오브젝트의 생성을 해야하고, Completion Port 오브젝트와 소켓의 연결을 해야 한다.
+이 소켓은 반드시 Overlapped 속성이 부여된 소켓이어야 하며, 하나의 함수를 통해서 이뤄진다.
+#include <windows.h>
+HANDLE CreateIoCompletionPort(HANDLE FileHandle, HANDLE ExistingCompletionPort, ULONG_PTR CompletionKey, DWORD NumberOfConcurrentThreads);
+// 성공 시 CP 오브젝트의 핸들, 실패 시 NULL 반환
+FileHandle:CP 오브젝트 생성시에는 INVALID_HANDLE_VALUE를 전달.
+ExistingCompletionPort:CP 오브젝트 생성시에는 NULL 전달
+CompletionKey:CP 오브젝트 생성시에는 0 전달
+NumberOfConcurrentThreads:CP 오브젝트에 할당되어 완료된 IO를 처리할 쓰레드의 수를 전달.
+2가 전달되면 CP 오브젝트에 할당되어 동시 실행 가능. 한 쓰레드의 수는 최대 2개로 제한된다.
+이 인자에 0이 전달되면 시스템의 CPU 개수가 동시 실행 가능한 쓰레드의 최대수로 지정된다.
+CP 오브젝트의 생성을 목적으로 호출할 때에는 마지막 매개변수만이 의미를 갖는다.
+CP 오브젝트에 할당되어 IO를 처리할 쓰레드의 수를 2개로 지정할 경우
+HANDLE hCpObject;
+...
+hCpObject = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 2);
+
+Completion Port 오브젝트와 소켓의 연결
+CP 오브젝트가 생성되었다면, 소켓과 연결시켜야 한다.
+그래야 완료된 소켓의 IO정보가 CP 오브젝트에 등록된다.
+#include <windows.h>
+HANDLE CreateIoCompletionPort(HANDLE FileHandle, HANDLE ExistingCompletionPort, ULONG_PTR CompletionKey, DWORD NumberOfConcurrentThreads);
+// 성공 시 CP 오브젝트의 핸들, 실패 시 NULL 반환
+FileHandle:CP 오브젝트에 연결할 소켓의 핸들 전달.
+ExistingCompletionPort:소켓과 연결할 CP 오브젝트의 핸들 전달
+CompletionKey:완료된 IO 관련 정보의 전달을 위한 매개변수, GetQueuedCompletionStatus 함수와 함께.
+NumberOfConcurrentThreads:어떠한 값을 전달하건, 이 함수의 두 번째 매개변수가 NULL이 아니면 무시된다.
+매개변수 FileHandle에는 전달된 핻늘의 소켓을 매개변수 ExistingCompletionPort에 전달된 핸들의 CP 오브젝트에 연결시키는 것이 두 번째 기능.
+HANDLE hCpObject;
+SOCKET hSock;
+...
+CreateIoCompletionPort((HANDLE)hSock, hCpObject, (DWORD)ioInfo, 0);
+CreateCompletionPort 함수가 호출된 이후부터는 hSock을 대상으로 진행된 IO가 완료되면, 이에 대한 정보가 핸들 hCpObject에 해당하는 CP 오브젝트에 등록된다.
+
+Completion Port의 완료된 IO 확인과 쓰레드의 IO처리
+CP에 등록되는 완료된 IO의 확인방법
+#include <windows.h>
+BOOL GetQueuedCompletionStatus(HANDLE CompletionPort, LPDWORD lpNumberOfBytes, PULONG_PTR lpCompletionKey, LPOVERLAPPED* lpOverlapped, DWORD dwMilliseconds);
+// 성공 시 TRUE, 실패 시 FALSE 반환
+CompletionPort:완료된 IO 정보가 등록되어 있는 CP 오브젝트의 핸들 전달.
+lpNumberOfBytes:입출력 과정에서 송수신 된 데이터의 크기정보를 저장할 변수의 주소 값 전달.
+lpCompletoinKey:CreateCompletionPort 함수의 세 번째 인자로 전달된 값의 저장을 위한 변수의 주소 값 전달.
+lpOverlapped:WSASend, WSARecv 함수호출 시 전달하는 OVERLAPPED 구조체 변수의 주소 값이 저장될, 변수의 주소 값 전달.
+dwMilliseconds:타임아웃 정보전달, 여기서 지정한 시간이 완료되면 FALSE를 반환하면서 함수를 빠져나가며,
+INFINITE를 전달하면 완료된 IO가 CP 오브젝트에 등록될 때까지 블로킹 상태에 있게 된다.
+GetQueuedCompletionStatus 함수의 세 번째 인자를 통해서 얻게 되는 것은 소켓과 CP 오브젝트의 연결을 목적으로 
+CreateCompletionPort 함수가 호출될 때 전달되면 세 번째 인자 값이다.
+GetQueuedCompletionStatus 함수의 네 번째 인자를 통해서 얻게 되는 것은 WSASend, WSARecv 함수호출 시 전달되는 WSAOVERLAPPED 구조체 변수의 주소 값이다.
+
+이 함수는 IOCP의 완료된 IO 처리를 담당하는 쓰레드가 호출해야 한다.
+IOCP에서는 IO를 전달하는 쓰레드를 별도로 생성하고, 이 쓰레드가 모든 클라이언트를 대상으로 IO를 진행하게 된다.
+CreateCompletionPort 함수에는 생성되는 CP 오브젝트에 할당할 최대 쓰레드의 수를 지정하는 매개변수도 존재한다.
+입출력 함수는 WSASend, WSARecv 함수를 호출하는 쓰레드는 직접 생성해야 한다.
+다만 이 쓰레드가 입출력의 완료를 위해서 GetQueuedCompletionStatus 함수를 호출할 뿐이다.
+그리고 GetQueuedCompletionStatus 함수는 어떠한 쓰레드라도 호출 가능하지만, 실제 IO의 완료에 대한 응답을 받는 쓰레드의 수는
+CreateCompletionPort 함수호출 시 지정한 최대 스레드의 수를 넘지 않는다.
+
+Completion Port에 할당할 쓰레드의 적정 개수는?
+CP 오브젝트에 할당할 적정 쓰레드의 수는 컴퓨터의 CPU 수라도 MSDN에서 설명한다.
+하지만 요즘 CPU는 내부적으로 연산기능을 갖춘 코어가 둘이상이다.
+코어가 둘이면 동시에 두 개의 쓰레드를 실행시킬 수 있기 때문에 CP 오브젝트에 할당할 적정 쓰레드의 수는 컴퓨터의 CPU내에 존재하는 코어의 수로 이해하는 것이 좋다.
+전문가가 아닌 경우에는 코어와 CPU를 동일시해서 얘기하기도 한다.
+성능을 최대로 이끌어 낼 쓰레드의 수를 정확히 파악하고 싶다면, 실험적 결과를 통해서만 확인이 가능하다.
